@@ -1,30 +1,24 @@
 import cv2
+from picamera2 import Picamera2
+from pyzbar.pyzbar import decode
 
-# set up camera object
-cap = cv2.VideoCapture(0)
-
-# QR code detection object
-detector = cv2.QRCodeDetector()
+picam = Picamera2()
+picam.configure(picam.create_preview_configuration(main={"format": "RGB888", "size": (640, 480)}))
+picam.start()
 
 while True:
-    # get the image
-    _, img = cap.read()
-    # get bounding box coords and data
-    data, bbox, _ = detector.detectAndDecode(img)
-    
-    # if there is a bounding box, draw one, along with the data
-    if(bbox is not None):
-        for i in range(len(bbox)):
-            cv2.line(img, tuple(bbox[i][0]), tuple(bbox[(i+1) % len(bbox)][0]), color=(255,
-                     0, 255), thickness=2)
-        cv2.putText(img, data, (int(bbox[0][0][0]), int(bbox[0][0][1]) - 10), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5, (0, 255, 0), 2)
-        if data:
-            print("data found: ", data)
-    # display the image preview
+    img = picam.capture_array()
+
+    for code in decode(img):
+        data = code.data.decode("utf-8")
+        x, y, w, h = code.rect
+        cv2.rectangle(img, (x, y), (x + w, y + h), color=(255, 0, 255), thickness=2)
+        cv2.putText(img, data, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        print("data found:", data)
+
     cv2.imshow("code detector", img)
-    if(cv2.waitKey(1) == ord("q")):
+    if cv2.waitKey(1) == ord("q"):
         break
-# free camera object and exit
-cap.release()
+
+picam.close()
 cv2.destroyAllWindows()
