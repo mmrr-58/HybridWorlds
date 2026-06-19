@@ -1,14 +1,18 @@
 import cv2
+from picamera2 import Picamera2
 
-# set up camera object
-cap = cv2.VideoCapture(0)
+# set up camera object (CSI camera via libcamera, not cv2.VideoCapture)
+picam2 = Picamera2()
+picam2.configure(picam2.create_preview_configuration(
+    main={"format": "RGB888", "size": (640, 480)}))
+picam2.start()
 
 # QR code detection object
 detector = cv2.QRCodeDetector()
 
 while True:
-    # get the image
-    _, img = cap.read()
+    # get the image (RGB888 format is delivered in BGR byte order, matching what cv2 expects)
+    img = picam2.capture_array()
     # get bounding box coords and data
     data, bbox, _ = detector.detectAndDecode(img)
     
@@ -26,5 +30,5 @@ while True:
     if(cv2.waitKey(1) == ord("q")):
         break
 # free camera object and exit
-cap.release()
+picam2.stop()
 cv2.destroyAllWindows()
