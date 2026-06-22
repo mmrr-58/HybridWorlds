@@ -57,10 +57,7 @@ String identifyType(float voltage) {
   return "Unknown";
 }
 
-void loop() {
-
-  voltReadings();
-
+void serialPrinter(){
   Serial.print("Pin 34: ");
   Serial.print(v1);
   Serial.print(" V -> ");
@@ -152,5 +149,10 @@ void loop() {
     // Serial.println(analogRead(39));
 
     Serial.println("----------------");
+}
+
+void loop() {
+  voltReadings();
+  serialPrinter();
   delay(500);
 }
