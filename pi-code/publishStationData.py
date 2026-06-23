@@ -31,7 +31,7 @@ def publishStat(data):
     for variable, stat in data.items():
         if variable == "id":
             continue
-        info = client.publish(variable, str(stat))
+        info = client.publish("station/" + variable, str(stat))
         info.wait_for_publish()
         print(f"{variable} -> {stat}")
 
