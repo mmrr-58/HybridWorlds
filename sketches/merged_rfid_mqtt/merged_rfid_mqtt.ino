@@ -24,9 +24,12 @@ MFRC522      mfrc522(SS_PIN, RST_PIN);
 unsigned long lastRFIDCheck = 0;
 const unsigned long RFID_INTERVAL = 1000;  // ms between RFID polls
 
-int activeLight = 0;  // 0 = none, 1 = LIGHT_1, 2 = LIGHT_2
+int activeCard = 0;  // 0 = none, 1 = Player1, 2 = Player2
 
-bool msgRecieved = false;
+// MSG logic
+bool msgReceived = false;
+int val1 = 0;
+int val2 = 0;
 
 // WiFi 
 
@@ -56,11 +59,18 @@ void setupWiFi() {
 
 // MQTT 
 
-void stationAction(int val1, int val2) {
-  if (val1 = 4) {
-    digitalWrite(LEDPin, HIGH);
-  } else {
-    digitalWrite(LEDPin, LOW);
+void stationAction() {
+  if (val1) {
+    if (activeCard == 1) {
+        digitalWrite(LIGHT_1, HIGH);
+        digitalWrite(LIGHT_2, LOW);  
+    }
+  }
+  if (val2) {
+    if (activeCard == 2) {
+        digitalWrite(LIGHT_1, LOW);
+        digitalWrite(LIGHT_2, HIGH);  
+    }
   }
 }
 
@@ -68,7 +78,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived on topic: ");
   Serial.print(topic);
   Serial.print(". Message: ");
-  msgRecieved = true;
+  msgReceived = true;
 
   String message;
   for (unsigned int i = 0; i < length; i++) {
@@ -79,13 +89,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
   int commaIndex = message.indexOf(',');
   if (commaIndex == -1) return;
 
-  int val1 = message.substring(1, commaIndex).toInt();
-  int val2 = message.substring(commaIndex + 1, message.length() - 1).toInt();
+  val1 = message.substring(1, commaIndex).toInt();
+  val2 = message.substring(commaIndex + 1, message.length() - 1).toInt();
 
   Serial.println(val1);
   Serial.println(val2);
 
-  stationAction(val1, val2);
 }
 
 void reconnect() {
@@ -93,7 +102,7 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("healthStation")) {
       Serial.println("connected");
-      client.subscribe("station/health");
+      client.subscribe("station/health"); // change topic name for correct station!!
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -115,12 +124,13 @@ bool isCardStillPresent() {
 
 void rfidAction() {
   // A light is on — just check if the same card is still there
-  if (activeLight != 0) {
+  if (activeCard != 0) {
     if (!isCardStillPresent()) {
-      Serial.println("Card removed. Turning off lights.");
+      Serial.println("Card removed");
+      client.publish("station/health", "Removed"); // change topic name for correct station!!
       digitalWrite(LIGHT_1, LOW);
       digitalWrite(LIGHT_2, LOW);
-      activeLight = 0;
+      activeCard = 0;
     } else {
       mfrc522.PICC_HaltA();  // put it back to halt so next WUPA can find it
     }
@@ -140,40 +150,36 @@ void rfidAction() {
       mfrc522.uid.uidByte[1] == 0x5B &&
       mfrc522.uid.uidByte[2] == 0x8E &&
       mfrc522.uid.uidByte[3] == 0x32 && 
-      msgRecieved) {
+      msgReceived) {
 
-    Serial.println("Tag 1 detected! Turning on Light 1.");
-    digitalWrite(LIGHT_1, HIGH);
-    digitalWrite(LIGHT_2, LOW);
-    activeLight = 1;
+    Serial.println("Tag 1 detected! msg received");
+    activeCard = 1;
   } 
   else if (mfrc522.uid.uidByte[0] == 0x4A &&
       mfrc522.uid.uidByte[1] == 0x5B &&
       mfrc522.uid.uidByte[2] == 0x8E &&
       mfrc522.uid.uidByte[3] == 0x32 && 
-      !msgRecieved) {
+      !msgReceived) {
 
-    Serial.println("Tag 1 detected! No msg recieved");
+    Serial.println("Tag 1 detected! No msg received");
   } 
   // Tag 2: 87 64 97 31
   else if (mfrc522.uid.uidByte[0] == 0x87 &&
            mfrc522.uid.uidByte[1] == 0x64 &&
            mfrc522.uid.uidByte[2] == 0x97 &&
            mfrc522.uid.uidByte[3] == 0x31 &&
-           msgRecieved) {
+           msgReceived) {
 
-    Serial.println("Tag 2 detected! Turning on Light 2.");
-    digitalWrite(LIGHT_1, LOW);
-    digitalWrite(LIGHT_2, HIGH);
-    activeLight = 2;
+    Serial.println("Tag 2 detected! msg received");
+    activeCard = 2;
   }
   else if (mfrc522.uid.uidByte[0] == 0x87 &&
            mfrc522.uid.uidByte[1] == 0x64 &&
            mfrc522.uid.uidByte[2] == 0x97 &&
            mfrc522.uid.uidByte[3] == 0x31 &&
-           !msgRecieved) {
+           !msgReceived) {
 
-    Serial.println("Tag 2 detected! No msg recieved");
+    Serial.println("Tag 2 detected! No msg received");
   }
   else {
     Serial.print("Unknown tag:");
@@ -220,4 +226,6 @@ void loop() {
     lastRFIDCheck = now;
     rfidAction();
   }
+
+  stationAction();
 }
