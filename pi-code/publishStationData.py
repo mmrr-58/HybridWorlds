@@ -28,12 +28,29 @@ def start():
 
 
 def publishStat(data):
-    for variable, stat in data.items():
-        if variable == "id":
-            continue
-        info = client.publish(variable, str(stat))
-        info.wait_for_publish()
-        print(f"{variable} -> {stat}")
+    ids = []
+    safety = []
+    health = []
+    cost = []
+    pollution = []
+
+    for city in data:
+        ids.append(city['id'])
+        safety.append(city['safety'])
+        health.append(city['health'])
+        cost.append(city['cost'])
+        pollution.append(city['pollution'])
+    
+    info = client.publish("station/globe", str(ids))
+    info.wait_for_publish()
+    info = client.publish("station/safety", str(safety))
+    info.wait_for_publish()
+    info = client.publish("station/health", str(health))
+    info.wait_for_publish()
+    info = client.publish("station/cost", str(cost))
+    info.wait_for_publish()
+    info = client.publish("station/pollution", str(pollution))
+    info.wait_for_publish()
 
 
 def stop():
