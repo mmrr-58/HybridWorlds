@@ -26,6 +26,8 @@ const unsigned long RFID_INTERVAL = 1000;  // ms between RFID polls
 
 int activeLight = 0;  // 0 = none, 1 = LIGHT_1, 2 = LIGHT_2
 
+bool msgRecieved = false;
+
 // WiFi 
 
 void setupWiFi() {
@@ -54,8 +56,8 @@ void setupWiFi() {
 
 // MQTT 
 
-void stationAction(String message) {
-  if (message == "4") {
+void stationAction(int val1, int val2) {
+  if (val1 = 4) {
     digitalWrite(LEDPin, HIGH);
   } else {
     digitalWrite(LEDPin, LOW);
@@ -66,6 +68,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived on topic: ");
   Serial.print(topic);
   Serial.print(". Message: ");
+  msgRecieved = true;
 
   String message;
   for (unsigned int i = 0; i < length; i++) {
@@ -73,7 +76,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   Serial.println(message);
 
-  stationAction(message);
+  int commaIndex = message.indexOf(',');
+  if (commaIndex == -1) return;
+
+  int val1 = message.substring(1, commaIndex).toInt();
+  int val2 = message.substring(commaIndex + 1, message.length() - 1).toInt();
+
+  Serial.println(val1);
+  Serial.println(val2);
+
+  stationAction(val1, val2);
 }
 
 void reconnect() {
@@ -81,7 +93,7 @@ void reconnect() {
     Serial.print("Attempting MQTT connection...");
     if (client.connect("healthStation")) {
       Serial.println("connected");
-      client.subscribe("health");
+      client.subscribe("station/health");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -127,23 +139,41 @@ void rfidAction() {
   if (mfrc522.uid.uidByte[0] == 0x4A &&
       mfrc522.uid.uidByte[1] == 0x5B &&
       mfrc522.uid.uidByte[2] == 0x8E &&
-      mfrc522.uid.uidByte[3] == 0x32) {
+      mfrc522.uid.uidByte[3] == 0x32 && 
+      msgRecieved) {
 
     Serial.println("Tag 1 detected! Turning on Light 1.");
     digitalWrite(LIGHT_1, HIGH);
     digitalWrite(LIGHT_2, LOW);
     activeLight = 1;
-  }
+  } 
+  else if (mfrc522.uid.uidByte[0] == 0x4A &&
+      mfrc522.uid.uidByte[1] == 0x5B &&
+      mfrc522.uid.uidByte[2] == 0x8E &&
+      mfrc522.uid.uidByte[3] == 0x32 && 
+      !msgRecieved) {
+
+    Serial.println("Tag 1 detected! No msg recieved");
+  } 
   // Tag 2: 87 64 97 31
   else if (mfrc522.uid.uidByte[0] == 0x87 &&
            mfrc522.uid.uidByte[1] == 0x64 &&
            mfrc522.uid.uidByte[2] == 0x97 &&
-           mfrc522.uid.uidByte[3] == 0x31) {
+           mfrc522.uid.uidByte[3] == 0x31 &&
+           msgRecieved) {
 
     Serial.println("Tag 2 detected! Turning on Light 2.");
     digitalWrite(LIGHT_1, LOW);
     digitalWrite(LIGHT_2, HIGH);
     activeLight = 2;
+  }
+  else if (mfrc522.uid.uidByte[0] == 0x87 &&
+           mfrc522.uid.uidByte[1] == 0x64 &&
+           mfrc522.uid.uidByte[2] == 0x97 &&
+           mfrc522.uid.uidByte[3] == 0x31 &&
+           !msgRecieved) {
+
+    Serial.println("Tag 2 detected! No msg recieved");
   }
   else {
     Serial.print("Unknown tag:");
