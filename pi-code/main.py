@@ -29,21 +29,19 @@ cities = [orangeCity, purpleCity]
 
 start()
 try:
+    publishStat(cities)
+    startInitialStations(state)
+
+    # Wait until player 1 has been removed from the last station
+    while state["1"] < len(STATIONS):
+        time.sleep(0.1)
+
+    # Players are now at the camera — scan year as many times as they like
     while True:
-        # Reset state in-place each round so on_message closure stays valid
-        state["1"] = 0
-        state["2"] = 3
-
-        publishStat(cities)
-        startInitialStations(state)
-
-        # Wait until player 1 has been removed from the last station
-        while state["1"] < len(STATIONS):
-            time.sleep(0.1)
-
         year = scan_year()
         setCityParameters(orangeCity, year)
         setCityParameters(purpleCity, year)
         cities = [orangeCity, purpleCity]
+        print(f"Year {year} | Orange: {orangeCity} | Purple: {purpleCity}")
 finally:
     stop()
