@@ -22,4 +22,17 @@ def assign_city(cityID):
             """, (cityID,)).fetchone()
     city_stats = {"id": city[0], "safety": city[1], "health": city[2], "cost": city[3], "pollution": city[4],}
     return city_stats
+
+def setCityParameters(city, year):
+    row = cursor.execute("""
+            SELECT id, cost_of_living_classification, safety_classification, health_care_classification, pollution_classification
+            FROM quality_of_life
+            WHERE id = ?
+                AND year = ?;
+            """, (city["id"], year)).fetchone()
+    if row:
+        city["safety"] = row[1]
+        city["health"] = row[2]
+        city["cost"] = row[3]
+        city["pollution"] = row[4]
     

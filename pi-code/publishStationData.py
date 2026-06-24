@@ -56,8 +56,8 @@ STATIONS = ["cost", "health", "pollution", "safety"]
 
 def startInitialStations(state):
     """Publish start for station 1 (player 1) and station 4 (player 2)."""
-    client.publish(f"station/{STATIONS[state['1']]}", "start").wait_for_publish()
-    client.publish(f"station/{STATIONS[state['2']]}", "start").wait_for_publish()
+    client.publish(f"station/{STATIONS[state['1']]}", "start1").wait_for_publish()
+    client.publish(f"station/{STATIONS[state['2']]}", "start2").wait_for_publish()
 
 def startStation(msg, state):
     if "Removed" not in msg:
