@@ -147,9 +147,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
-    if (client.connect("healthStation")) {
+    if (client.connect("safetyStation")) {
       Serial.println("connected");
-      client.subscribe("station/health"); // change topic name for correct station!!
+      client.subscribe("station/safety"); // change topic name for correct station!!
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -174,7 +174,7 @@ void rfidAction() {
   if (activeCard != 0) {
     if (!isCardStillPresent()) {
       String msg = "Removed: " + String(activeCard);
-      client.publish("station/health", msg.c_str()); // change topic name for correct station!!
+      client.publish("station/safety", msg.c_str()); // change topic name for correct station!!
       strip.clear();
       strip.show();
       activeCard = 0;
