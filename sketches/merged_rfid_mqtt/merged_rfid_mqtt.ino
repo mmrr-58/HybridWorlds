@@ -126,8 +126,9 @@ void rfidAction() {
   // A light is on — just check if the same card is still there
   if (activeCard != 0) {
     if (!isCardStillPresent()) {
-      Serial.println("Card removed");
-      client.publish("station/health", "Removed"); // change topic name for correct station!!
+      Serial.println("Card removed " + String(activeCard));
+      String msg = "Removed: " + String(activeCard);
+      client.publish("station/health", msg.c_str()); // change topic name for correct station!!
       digitalWrite(LIGHT_1, LOW);
       digitalWrite(LIGHT_2, LOW);
       activeCard = 0;
