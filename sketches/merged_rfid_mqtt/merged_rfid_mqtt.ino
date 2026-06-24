@@ -2,16 +2,16 @@
 #include <PubSubClient.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Adafruit_NeoPixel.h>
 
 // WiFi / MQTT config
 const char* ssid       = "PiWiFi";
 const char* password   = "1234509876";
 const char* mqttServer = "10.42.0.1";
 
-// Pin config
-const int LEDPin  = 2;   // Seeed Studio ESP built-in LED
-const int LIGHT_1 = 16;
-const int LIGHT_2 = 17;
+// NeoPizel pin config
+#define DATAPIN 17
+#define LED_COUNT 40
 
 // RFID pin config
 const int RST_PIN = 22;
@@ -20,6 +20,7 @@ const int SS_PIN  = 21;
 WiFiClient   esp;
 PubSubClient client(esp);
 MFRC522      mfrc522(SS_PIN, RST_PIN);
+Adafruit_NeoPixel strip(LED_COUNT, DATAPIN, NEO_GRB + NEO_KHZ800);
 
 unsigned long lastRFIDCheck = 0;
 const unsigned long RFID_INTERVAL = 1000;  // ms between RFID polls
@@ -27,7 +28,6 @@ const unsigned long RFID_INTERVAL = 1000;  // ms between RFID polls
 int activeCard = 0;  // 0 = none, 1 = Player1, 2 = Player2
 
 // MSG logic
-bool msgReceived = false;
 int val1 = 0;
 int val2 = 0;
 
@@ -57,19 +57,58 @@ void setupWiFi() {
   Serial.println(WiFi.gatewayIP());
 }
 
+// NeoPixel
+
+void startUpLights(int player) {
+  if (player == 1) {
+    strip.fill(strip.Color(140, 10, 0));  // orange
+    strip.show();
+  } else if (player == 2) {
+    strip.fill(strip.Color(100, 0, 140));  // purple
+    strip.show();
+  }
+}
+
+void blockLights(int player) {
+  strip.clear();
+  strip.show();
+
+  if (player == 1 && val1 > 1) {
+    int groups = val1 - 1;
+    for (int g = 0; g < groups; g++) {
+      int start = g * 5;
+      strip.setPixelColor(start,     strip.Color(140, 10, 0));
+      strip.setPixelColor(start + 1, strip.Color(140, 10, 0));
+      strip.setPixelColor(start + 2, strip.Color(140, 10, 0));
+      strip.show();
+      delay(1000);
+    }
+  }
+
+  if (player == 2 && val2 > 1) {
+    int groups = val2 - 1;
+    for (int g = 0; g < groups; g++) {
+      int start = (LED_COUNT - 1) - g * 5;
+      strip.setPixelColor(start,     strip.Color(100, 0, 140));
+      strip.setPixelColor(start - 1, strip.Color(100, 0, 140));
+      strip.setPixelColor(start - 2, strip.Color(100, 0, 140));
+      strip.show();
+      delay(1000);
+    }
+  }
+}
+
 // MQTT 
 
 void stationAction() {
   if (val1) {
-    if (activeCard == 1) {
-        digitalWrite(LIGHT_1, HIGH);
-        digitalWrite(LIGHT_2, LOW);  
+    if (activeCard == 1) { 
+      blockLights(1);     
     }
   }
   if (val2) {
     if (activeCard == 2) {
-        digitalWrite(LIGHT_1, LOW);
-        digitalWrite(LIGHT_2, HIGH);  
+      blockLights(2);
     }
   }
 }
@@ -78,13 +117,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived on topic: ");
   Serial.print(topic);
   Serial.print(". Message: ");
-  msgReceived = true;
 
   String message;
   for (unsigned int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
   Serial.println(message);
+   
+  if (message == "start1") {
+    startUpLights(1);
+    return;
+  }
+  if (message == "start2") {
+    startUpLights(2);
+    return;
+  }
 
   int commaIndex = message.indexOf(',');
   if (commaIndex == -1) return;
@@ -126,11 +173,10 @@ void rfidAction() {
   // A light is on — just check if the same card is still there
   if (activeCard != 0) {
     if (!isCardStillPresent()) {
-      Serial.println("Card removed " + String(activeCard));
       String msg = "Removed: " + String(activeCard);
       client.publish("station/health", msg.c_str()); // change topic name for correct station!!
-      digitalWrite(LIGHT_1, LOW);
-      digitalWrite(LIGHT_2, LOW);
+      strip.clear();
+      strip.show();
       activeCard = 0;
     } else {
       mfrc522.PICC_HaltA();  // put it back to halt so next WUPA can find it
@@ -151,36 +197,36 @@ void rfidAction() {
       mfrc522.uid.uidByte[1] == 0x5B &&
       mfrc522.uid.uidByte[2] == 0x8E &&
       mfrc522.uid.uidByte[3] == 0x32 && 
-      msgReceived) {
+      val1) {
 
-    Serial.println("Tag 1 detected! msg received");
+    Serial.println("Tag 1 detected! val received");
     activeCard = 1;
   } 
   else if (mfrc522.uid.uidByte[0] == 0x4A &&
       mfrc522.uid.uidByte[1] == 0x5B &&
       mfrc522.uid.uidByte[2] == 0x8E &&
       mfrc522.uid.uidByte[3] == 0x32 && 
-      !msgReceived) {
+      !val1) {
 
-    Serial.println("Tag 1 detected! No msg received");
+    Serial.println("Tag 1 detected! No val received");
   } 
   // Tag 2: 87 64 97 31
   else if (mfrc522.uid.uidByte[0] == 0x87 &&
            mfrc522.uid.uidByte[1] == 0x64 &&
            mfrc522.uid.uidByte[2] == 0x97 &&
            mfrc522.uid.uidByte[3] == 0x31 &&
-           msgReceived) {
+           val2) {
 
-    Serial.println("Tag 2 detected! msg received");
+    Serial.println("Tag 2 detected! val received");
     activeCard = 2;
   }
   else if (mfrc522.uid.uidByte[0] == 0x87 &&
            mfrc522.uid.uidByte[1] == 0x64 &&
            mfrc522.uid.uidByte[2] == 0x97 &&
            mfrc522.uid.uidByte[3] == 0x31 &&
-           !msgReceived) {
+           !val2) {
 
-    Serial.println("Tag 2 detected! No msg received");
+    Serial.println("Tag 2 detected! No val received");
   }
   else {
     Serial.print("Unknown tag:");
@@ -199,12 +245,8 @@ void rfidAction() {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(LEDPin,  OUTPUT);
-  pinMode(LIGHT_1, OUTPUT);
-  pinMode(LIGHT_2, OUTPUT);
-  digitalWrite(LEDPin,  LOW);
-  digitalWrite(LIGHT_1, LOW);
-  digitalWrite(LIGHT_2, LOW);
+  strip.begin();
+  strip.show();  // start with all pixels off
 
   setupWiFi();
   client.setServer(mqttServer, 1883);
