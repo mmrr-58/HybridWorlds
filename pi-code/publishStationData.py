@@ -52,6 +52,24 @@ def publishStat(data):
     info = client.publish("station/pollution", str(pollution))
     info.wait_for_publish()
 
+STATIONS = ["cost", "health", "pollution", "safety"]
+
+def startInitialStations(state):
+    """Publish start for station 1 (player 1) and station 4 (player 2)."""
+    client.publish(f"station/{STATIONS[state['1']]}", "start").wait_for_publish()
+    client.publish(f"station/{STATIONS[state['2']]}", "start").wait_for_publish()
+
+def startStation(msg, state):
+    if "Removed" not in msg:
+        return
+    if "1" in msg:
+        state["1"] += 1
+        if state["1"] < len(STATIONS):
+            client.publish(f"station/{STATIONS[state['1']]}", "start")
+    if "2" in msg:
+        state["2"] -= 1
+        if state["2"] >= 0:
+            client.publish(f"station/{STATIONS[state['2']]}", "start")
 
 def stop():
     client.loop_stop()

@@ -15,7 +15,7 @@ def createPlayers():
 
 def assign_city(cityID):
     city = cursor.execute("""
-            SELECT id, safety_classification, health_care_classification, cost_of_living_classification, pollution_classification
+            SELECT id, cost_of_living_classification, safety_classification, health_care_classification, pollution_classification
             FROM quality_of_life
             WHERE id = ?
                 AND year = 2026;
