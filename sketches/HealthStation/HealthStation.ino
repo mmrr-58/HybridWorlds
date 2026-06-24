@@ -9,9 +9,13 @@ const char* ssid       = "PiWiFi";
 const char* password   = "1234509876";
 const char* mqttServer = "10.42.0.1";
 
-// NeoPizel pin config
+// BottomNeoPixel pin config
 #define DATAPIN 17
 #define LED_COUNT 40
+
+// HospitalNeoPixel pin config
+#define HOSPITALPIN 16
+#define HOSPITAL_COUNT 21
 
 // RFID pin config
 const int RST_PIN = 22;
@@ -21,6 +25,9 @@ WiFiClient   esp;
 PubSubClient client(esp);
 MFRC522      mfrc522(SS_PIN, RST_PIN);
 Adafruit_NeoPixel strip(LED_COUNT, DATAPIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel hospitalStrip(HOSPITAL_COUNT, HOSPITALPIN, NEO_GRB + NEO_KHZ800);
+
+int currentAnimation = -1;  // -1 = off
 
 unsigned long lastRFIDCheck = 0;
 const unsigned long RFID_INTERVAL = 1000;  // ms between RFID polls
@@ -98,18 +105,82 @@ void blockLights(int player) {
   }
 }
 
-// MQTT 
+// Hospital animations
 
-void stationAction() {
-  if (val1) {
-    if (activeCard == 1) { 
-      blockLights(1);     
+void breathingYellow() {
+  static int brightness = 20;
+  static int direction = 2;
+  brightness += direction;
+  if (brightness >= 150 || brightness <= 20) direction = -direction;
+  hospitalStrip.fill(hospitalStrip.Color(brightness, brightness, 0));
+  hospitalStrip.show();
+  delay(20);
+}
+
+void nightShift() {
+  int pixel = random(HOSPITAL_COUNT);
+  if (random(100) < 50)
+    hospitalStrip.setPixelColor(pixel, hospitalStrip.Color(60, 50, 0));
+  else
+    hospitalStrip.setPixelColor(pixel, 0);
+  hospitalStrip.show();
+  delay(300);
+}
+
+void busyHospital() {
+  int pixel = random(HOSPITAL_COUNT);
+  int b = random(80, 255);
+  hospitalStrip.setPixelColor(pixel, hospitalStrip.Color(b, b * 0.8, 0));
+  hospitalStrip.show();
+  delay(80);
+}
+
+void emergencyMode() {
+  static bool flash = false;
+  for (int i = 0; i < HOSPITAL_COUNT; i++) {
+    if (i < 5) {
+      hospitalStrip.setPixelColor(i, flash ? hospitalStrip.Color(255, 0, 0) : hospitalStrip.Color(255, 180, 0));
+    } else {
+      hospitalStrip.setPixelColor(i, hospitalStrip.Color(50, 50, 0));
     }
   }
-  if (val2) {
-    if (activeCard == 2) {
-      blockLights(2);
-    }
+  hospitalStrip.show();
+  flash = !flash;
+  delay(150);
+}
+
+void powerSweep() {
+  static int pos = 0;
+  hospitalStrip.clear();
+  hospitalStrip.setPixelColor(pos, hospitalStrip.Color(255, 255, 0));
+  if (pos > 0) hospitalStrip.setPixelColor(pos - 1, hospitalStrip.Color(100, 100, 0));
+  if (pos > 1) hospitalStrip.setPixelColor(pos - 2, hospitalStrip.Color(30, 30, 0));
+  hospitalStrip.show();
+  if (++pos >= HOSPITAL_COUNT) pos = 0;
+  delay(50);
+}
+
+void runHospitalAnimation() {
+  switch (currentAnimation) {
+    case 0: breathingYellow(); break;
+    case 1: nightShift();     break;
+    case 2: busyHospital();   break;
+    case 3: emergencyMode();  break;
+    case 4: powerSweep();     break;
+  }
+}
+
+// MQTT
+
+void stationAction() {
+  if (activeCard == 1 && val1) {
+    blockLights(1);
+    currentAnimation = 5 - val1;
+    runHospitalAnimation();
+  } else if (activeCard == 2 && val2) {
+    blockLights(2);
+    currentAnimation = 5 - val2;
+    runHospitalAnimation();
   }
 }
 
@@ -177,6 +248,9 @@ void rfidAction() {
       client.publish("station/health", msg.c_str()); // change topic name for correct station!!
       strip.clear();
       strip.show();
+      hospitalStrip.clear();
+      hospitalStrip.show();
+      currentAnimation = -1;
       activeCard = 0;
     } else {
       mfrc522.PICC_HaltA();  // put it back to halt so next WUPA can find it
@@ -246,7 +320,9 @@ void setup() {
   Serial.begin(115200);
 
   strip.begin();
-  strip.show();  // start with all pixels off
+  strip.show();
+  hospitalStrip.begin();
+  hospitalStrip.show();
 
   setupWiFi();
   client.setServer(mqttServer, 1883);
