@@ -1,11 +1,11 @@
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <Adafruit_NeoPixel.h>
 #include <Wire.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
 
 //----------------------------------------BASE GLOBE CODE INITIALIZERS------------------------------------------
-#include <Adafruit_NeoPixel.h>
 const int PIN = 12;
 const int NUMPIXELS = 16;
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
@@ -16,8 +16,9 @@ bool startLoop = false;
 
 //Acceleration sensor
 float accTotal;
-float accThreshold = 15;
-
+float accThreshold = 12;
+bool onlyTouched = false;
+bool userTouched = false;
 //Spin stuff
 int spinAmount = 0;
 bool userSpin = false;
@@ -26,9 +27,6 @@ bool userSpin = false;
 bool showAllCities1 = false;
 bool showAllCities2 = false;
 bool occupied = false;
-
-int selectedCity1;
-int selectedCity2;
 
 //Idle breathing
 int x = 0;
@@ -39,6 +37,8 @@ bool xDecrease = false;
 unsigned long timer;
 unsigned long citiesTimer;
 unsigned long citiesRuntimer;
+unsigned long sampleTimer;
+int sampleDelay = 500;
 int citiesDelay = 1000;
 int citiesRuntime = 6000;
 int runTime = 5000;
@@ -46,6 +46,7 @@ bool citiesInit = false;
 bool citiesRunInit = false;
 bool initialized = false;
 bool reInit = false;
+bool sampleInit = false;
 
 //Random flickering when spun stuff
 int turnOn;
@@ -63,7 +64,10 @@ int b;
 const char* ssid = "PiWiFi";
 const char* password = "1234509876";
 const char* mqttServer = "10.42.0.1";
-const int LEDPin = 2;  //Pin for the Seeed Studio ESP
+
+int orangeCity = 0;
+int purpleCity = 0;
+bool end = false;
 
 WiFiClient esp;
 PubSubClient client(esp);
@@ -101,9 +105,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   for (unsigned int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
-  Serial.print(message);
-
+  //Serial.print(message);
   stationAction(message, topic);
+
+  int commaIndex = message.indexOf(',');
+  if (commaIndex == -1) return;
+
+  orangeCity = message.substring(1, commaIndex).toInt();
+  purpleCity = message.substring(commaIndex + 1, message.length() - 1).toInt();
+
+  Serial.print(orangeCity);
+  Serial.println(purpleCity);
 }
 
 void reconnect() {
@@ -168,7 +180,7 @@ void accSensor() {
   mpu.getEvent(&a, &g, &temp);
 
   accTotal =
-    sqrt(a.acceleration.x * a.acceleration.x + a.acceleration.y * a.acceleration.y + a.acceleration.z * a.acceleration.z);
+    sqrt(a.acceleration.z * a.acceleration.z);
 }
 
 void ledIdle() {
@@ -252,24 +264,54 @@ void userSpun() {
   if (!initialized) {
     timer = millis();
   }
+  if (!sampleInit) {
+    sampleTimer = millis();
+  }
 
   if (!userSpin && spinAmount == 0) {
     ledIdle();
   }
 
   if (accTotal >= accThreshold && spinAmount < 2) {
-    userSpin = true;
-    initialized = true;
+    userTouched = true;
+    sampleInit = true;
+  }
+  //User touched globe
+  if (userTouched) {
+    Serial.print("user touched");
+    Serial.print("\t");
+
+    //User only touched the globe, no spin
+    if (millis() - sampleTimer >= sampleDelay) {
+      onlyTouched = true;
+      Serial.print("user touched once, no spin");
+      Serial.print("\t");
+
+      //User actually spun the globe
+      if (accTotal >= accThreshold) {
+        userSpin = true;
+        initialized = true;
+        onlyTouched = false;
+        Serial.print("user spun the globe");
+        Serial.print("\t");
+      }
+    }
+  }
+
+  if ((millis() - sampleTimer >= sampleDelay + 500) && onlyTouched) {
+    userTouched = false;
+    sampleInit = false;
     showAllCities1 = false;
     showAllCities2 = false;
   }
-  if (userSpin && spinAmount < 2 && initialized) {
 
+
+  //If user spun do this
+  if (userSpin && spinAmount < 2 && initialized) {
     if (spinAmount == 0) {
       ledFlicker();
       if (millis() - timer >= runTime && initialized) {
         DELAYVAL = 10;
-        selectedCity1 = random(1, 16);
         initialized = false;
         userSpin = false;
         spinAmount++;
@@ -279,7 +321,6 @@ void userSpun() {
     if (spinAmount == 1) {
       ledFlicker();
       if (millis() - timer >= runTime && initialized) {
-        selectedCity2 = random(1, 16);
         initialized = false;
         userSpin = false;
         spinAmount++;
@@ -310,48 +351,70 @@ void userSpun() {
   pixels.show();
 }
 
+void endCities() {
+  pixels.setPixelColor(orangeCity, pixels.Color(140, 10, 0));
+  pixels.setPixelColor(purpleCity, pixels.Color(100, 0, 140));
+  // if (xIncrease) {
+  //   x++;
+  // }
+  // if (xDecrease) {
+  //   x--;
+  // }
+  // if (x >= 150) {
+  //   xIncrease = false;
+  //   xDecrease = true;
+  // }
+  // if (x <= 0) {
+  //   xIncrease = true;
+  //   xDecrease = false;
+  // }
+  pixels.show();
+}
+
 void serialPrinter() {
-  // Serial.print("Acc: ");
-  // Serial.print(accTotal);
-  // Serial.print("\t");
-  // Serial.print(millis());
-  // Serial.print("\t");
-  // Serial.print(millis() - timer);
-  // Serial.print("\t");
+  Serial.print("Acc: ");
+  Serial.print(accTotal);
+  Serial.print("\t");
   Serial.print(spinAmount);
+  Serial.print("\t");
+  Serial.print(millis() - sampleTimer);
+  Serial.print("\t");
+  Serial.print(userSpin);
   Serial.print("\t");
   Serial.println();
 }
 
 void stationAction(String message, String topic) {
+  Serial.print(message);
   if (message == "start") {
     startLoop = true;
+    end = false;
+    pixels.clear();
+    Serial.println("starting loop");
   }
-  if (message == "reset") {
-    spinAmount = 0;
+  else if (message == "reset") {
+    Serial.println("resetting globe");
+    ESP.restart();
+    // spinAmount = 0;
+    // startLoop = false;
+    // citiesInit = false;
+    // citiesRunInit = false;
+    // initialized = false;
+    // reInit = false;
+    // x = 0;
+    // xIncrease = true;
+    // xDecrease = false;
+    // userSpin = false;
+    // //Showing leds stuff
+    // showAllCities1 = false;
+    // showAllCities2 = false;
+    // occupied = false;
+  } else {
     startLoop = false;
-    citiesInit = false;
-    citiesRunInit = false;
-    initialized = false;
-    reInit = false;
-    x = 0;
-    xIncrease = true;
-    xDecrease = false;
-    userSpin = false;
-    //Showing leds stuff
-    showAllCities1 = false;
-    howAllCities2 = false;
-    occupied = false;
+    end = true;
+    pixels.clear();
+    Serial.println("end cities shown");
   }
-  // else {
-
-  // }
-  // if (topic == )
-  //   if (message == "") {
-  //     digitalWrite(LEDPin, HIGH);
-  //   } else {
-  //     digitalWrite(LEDPin, LOW);
-  //   }
 }
 
 
@@ -365,5 +428,9 @@ void loop() {
     accSensor();
     userSpun();
     serialPrinter();
+  }
+  if (end) {
+    Serial.println("show end cities");
+    endCities();
   }
 }
