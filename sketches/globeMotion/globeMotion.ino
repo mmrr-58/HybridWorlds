@@ -16,7 +16,7 @@ bool startLoop = false;
 
 //Acceleration sensor
 float accTotal;
-float accThreshold = 12;
+float accThreshold = 8;
 bool onlyTouched = false;
 bool userTouched = false;
 //Spin stuff
